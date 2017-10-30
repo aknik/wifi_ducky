@@ -9,9 +9,67 @@
 
 #include "Settings.h"
 
-#define BAUD_RATE 57200
+#define BAUD_RATE 9600
 #define bufferSize 600
 #define debug false
+
+/////////////////////////////////////////////////
+
+#include <SoftwareSerial.h>
+
+#define rxPin 14
+#define txPin 12
+
+
+
+SoftwareSerial mySerial(rxPin,txPin); // RX = rxPin, TX  = txPin
+
+const static uint8_t HIDTable[] =  {
+  0x00, // 0
+  0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x2A,0x00,0x00, // 10
+  0x00,0x00,0x28,0x00,0x00,0x00,0x00,0x00,0x00,0x00, // 20
+  0x00,0x00,0x00,0x00,0x00,0x00,0x29,0x00,0x00,0x00, // 30
+  0x00,0x2c,0x1e,0x1f,0x20,0x21,0x22,0x23,0x2d,0x25,
+  0x26,0x30,0x30,0x36,0x38,0x37,0x24,0x27,0x1e,0x1f,
+  0x20,0x21,0x22,0x23,0x24,0x25,0x26,0x37,0x36,0x64,
+  0x27,0x64,0x2d,0x1f,0x04,0x05,0x06,0x07,0x08,0x09,
+  0x0a,0x0b,0x0c,0x0d,0x0e,0x0f,0x10,0x11,0x12,0x13,
+  0x14,0x15,0x16,0x17,0x18,0x19,0x1a,0x1b,0x1c,0x1d,
+  0x2f,0x35,0x30,0x2f,0x38,0x2f,0x04,0x05,0x06,0x07,
+  0x08,0x09,0x0a,0x0b,0x0c,0x0d,0x0e,0x0f,0x10,0x11,
+  0x12,0x13,0x14,0x15,0x16,0x17,0x18,0x19,0x1a,0x1b,
+  0x1c,0x1d,0x34,0x1e,0x32,0x21,0x2c // 127
+};
+
+const static uint8_t MODTable[] =  {
+  0x00, // 0
+  0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00, // 10
+  0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00, // 20
+  0x00,0x00,0x00,0x00,0x00,0x00,0x02,0x00,0x00,0x00, // 30
+  0x00,0x00,0x02,0x02,0x40,0x02,0x02,0x02,0x00,0x02,
+  0x02,0x02,0x00,0x00,0x00,0x00,0x02,0x00,0x00,0x00,
+  0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x02,0x02,0x00,
+  0x02,0x02,0x02,0x40,0x02,0x02,0x02,0x02,0x02,0x02,
+  0x02,0x02,0x02,0x02,0x02,0x02,0x02,0x02,0x02,0x02,
+  0x02,0x02,0x02,0x02,0x02,0x02,0x02,0x02,0x02,0x02,
+  0x40,0x40,0x40,0x02,0x02,0x00,0x00,0x00,0x00,0x00,
+  0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+  0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+  0x00,0x00,0x40,0x40,0x40,0x40,0x00 // 127
+};
+
+
+uint8_t key ;
+uint8_t mod ;
+
+String last = "";
+int defaultDelay = 0;
+
+String bufferStr = "";
+/////////////////////////////////////////
+
+
+
 
 /* ============= CHANGE WIFI CREDENTIALS ============= */
 const char *ssid = "WiFi Duck";
@@ -86,6 +144,15 @@ void sendSettings(AsyncWebServerRequest *request) {
 }
 
 void setup() {
+ ///////////////////////////
+  mySerial.begin(9600); //Start mySerial    
+  mySerial.flush();
+  delay(1000);
+  Serial.println("\nDucky started");
+
+  while (mySerial.available() > 0 )  { delay(0);   } //  Espera señal de ATTINY de que está listo para recibir datos
+ 
+//////////////////	
   
   Serial.begin(BAUD_RATE);
   delay(2000);
@@ -348,6 +415,47 @@ void sendBuffer(){
   for(int i=0;i<bc;i++) Serial.write((char)scriptBuffer[i]);
   runLine = false;
   bc = 0;
+/////////////////////////////////////////////////
+	
+	
+	while(f.available()) {
+
+    bufferStr=f.readStringUntil('\n');
+
+    bufferStr.replace("\r","\n");
+    bufferStr.replace("\n\n","\n");
+    bufferStr.replace("\n ","\n");
+      
+      int latest_return = bufferStr.indexOf("\n");
+      if(latest_return == -1){
+         Serial.println("\nrun: "+bufferStr);
+        Line(bufferStr);
+        bufferStr = "";
+      } else{
+         Serial.println("\nrun: '"+bufferStr.substring(0, latest_return)+"'");
+        Line(bufferStr.substring(0, latest_return));
+        last=bufferStr.substring(0, latest_return);
+        bufferStr = bufferStr.substring(latest_return + 1);
+      }
+    }
+	
+	
+/////////////////////////////////////////////////
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
 }
 
 void addToBuffer(){
@@ -394,3 +502,141 @@ void loop() {
   }
 
 }
+/////////////////////////////////////////////////
+
+
+void DigiKeyboard(uint8_t key ){
+
+      
+      if(key > 0 || mod > 0 ) {
+        
+      mySerial.flush();
+      
+      mySerial.write(key);
+      mySerial.write(mod);
+      
+      while (mySerial.available() != 2)  { delay(0);   } // Espera confirmacion del ATTINY
+
+      // Serial.print(key,HEX);Serial.print(",");
+      // Serial.print(mod,HEX);Serial.print(",");
+
+                      
+///////////////////////////if(key == 0 ) delay(mod);
+                      
+      
+      
+                                } 
+}// THE END -0x5d
+
+
+
+
+void Line(String _line)
+{
+  int firstSpace = _line.indexOf(" ",1);
+  //Serial.println(_line.substring(0,firstSpace));
+  if(firstSpace == -1) Press(_line);
+    else if(_line.substring(0,firstSpace) == "STRING"){
+    
+    for(int i=firstSpace+1;i<_line.length();i++) { 
+      
+      
+      
+      Serial.print(_line[i],DEC);Serial.print(">");Serial.print(HIDTable[_line[i]],HEX);Serial.print(_line[i]);
+      
+      mod = MODTable[_line[i]];
+   
+      key = HIDTable[_line[i]];
+      
+      DigiKeyboard(key);
+  
+      
+      }
+
+    
+  }
+  else if(_line.substring(0,firstSpace) == "DELAY"){
+    int delaytime = _line.substring(firstSpace + 1).toInt();
+    
+while (delaytime > 0) {
+                                               
+if (delaytime > 255) {
+        mod = 255; DigiKeyboard(0);
+        delaytime = delaytime - 255;
+} else {
+        mod = delaytime; DigiKeyboard(0);
+        delaytime = 0;
+}
+                      }
+    
+    mod = delaytime; DigiKeyboard(0);
+  }
+  else if(_line.substring(0,firstSpace) == "DEFAULTDE }LAY") defaultDelay = _line.substring(firstSpace + 1).toInt();
+  else if(_line.substring(0,firstSpace) == "REM"){} //nothing :/
+  else if(_line.substring(0,firstSpace) == "REPLAY") {
+    int replaynum = _line.substring(firstSpace + 1).toInt();
+    while(replaynum)
+    {
+      Line(last);
+      --replaynum;
+    }
+  } else{
+      String remain = _line;
+
+      while(remain.length() > 0){
+        int latest_space = remain.indexOf(" ");
+        if (latest_space == -1){
+          Press(remain);
+          remain = "";
+        }
+        else{
+          Press(remain.substring(0, latest_space));
+          remain = remain.substring(latest_space + 1);
+        }
+        delay(5);
+      } }
+  }
+
+
+void Press(String b){
+
+  //Serial.println(b);
+
+  if(b.length() == 1) DigiKeyboard(char(b[0]));
+  else if (b.equals("ENTER")) DigiKeyboard(0x28);
+  else if (b.equals("CTRL")) mod = (MOD_CONTROL_LEFT);
+  else if (b.equals("SHIFT")) mod = (MOD_SHIFT_LEFT);
+  else if (b.equals("ALT")) mod = (MOD_ALT_LEFT);
+  else if (b.equals("GUI")) mod = (MOD_GUI_LEFT);
+  else if (b.equals("UP") || b.equals("UPARROW")) DigiKeyboard(KEY_ARROW_UP);
+  else if (b.equals("DOWN") || b.equals("DOWNARROW")) DigiKeyboard(KEY_ARROW_DOWN);
+  else if (b.equals("LEFT") || b.equals("LEFTARROW")) DigiKeyboard(KEY_ARROW_LEFT);
+  else if (b.equals("RIGHT") || b.equals("RIGHTARROW")) DigiKeyboard(KEY_ARROW_RIGHT);
+  else if (b.equals("DELETE")) DigiKeyboard(KEY_DELETE);
+  else if (b.equals("PAGEUP")) DigiKeyboard(KEY_PAGE_UP);
+  else if (b.equals("PAGEDOWN")) DigiKeyboard(KEY_PAGE_DOWN);
+  else if (b.equals("HOME")) DigiKeyboard(KEY_HOME);
+  else if (b.equals("ESC")) DigiKeyboard(KEY_ESCAPE);
+  else if (b.equals("BACKSPACE")) DigiKeyboard(KEY_DELETE);
+  else if (b.equals("INSERT")) DigiKeyboard(KEY_INSERT);
+  else if (b.equals("TAB")) DigiKeyboard(KEY_TAB);
+  else if (b.equals("END")) DigiKeyboard(KEY_END);
+  else if (b.equals("CAPSLOCK")) DigiKeyboard(KEY_CAPS_LOCK);
+  else if (b.equals("F1")) DigiKeyboard(KEY_F1);
+  else if (b.equals("F2")) DigiKeyboard(KEY_F2);
+  else if (b.equals("F3")) DigiKeyboard(KEY_F3);
+  else if (b.equals("F4")) DigiKeyboard(KEY_F4);
+  else if (b.equals("F5")) DigiKeyboard(KEY_F5);
+  else if (b.equals("F6")) DigiKeyboard(KEY_F6);
+  else if (b.equals("F7")) DigiKeyboard(KEY_F7);
+  else if (b.equals("F8")) DigiKeyboard(KEY_F8);
+  else if (b.equals("F9")) DigiKeyboard(KEY_F9);
+  else if (b.equals("F10")) DigiKeyboard(KEY_F10);
+  else if (b.equals("F11")) DigiKeyboard(KEY_F11);
+  else if (b.equals("F12")) DigiKeyboard(KEY_F12);
+  else if (b.equals("SPACE")) DigiKeyboard(' ');
+  //else Serial.println("not found :'"+b+"'("+String(b.length())+")");
+}
+
+
+
